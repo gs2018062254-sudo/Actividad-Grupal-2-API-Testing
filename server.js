@@ -5,7 +5,10 @@ const tasks = new Map();
 const port = Number(process.env.PORT || 3000);
 
 function sendJson(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -13,26 +16,54 @@ async function readJson(req) {
   let raw = '';
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 1_000_000) throw new Error('Request body too large');
+    if (raw.length > 1_000_000) throw new Error('El cuerpo excede 1 MB');
   }
-  try { return raw ? JSON.parse(raw) : {}; } catch { return null; }
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return null;
+  }
 }
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
   const pathname = url.pathname;
 
+  if (req.method === 'GET' && pathname === '/') {
+    return sendJson(res, 200, {
+      name: 'API de tareas',
+      description: 'Demo para practicar pruebas de API con Cypress',
+      documentation: 'https://github.com/gs2018062254-sudo/Actividad-Grupal-2-API-Testing',
+      endpoints: [
+        { method: 'GET', path: '/health', description: 'Estado del servicio' },
+        { method: 'GET', path: '/api/tasks', description: 'Listar tareas; filtro opcional ?completed=true|false' },
+        { method: 'POST', path: '/api/tasks', description: 'Crear tarea con {"title":"..."}' },
+        { method: 'GET', path: '/api/tasks/:id', description: 'Consultar tarea' },
+        { method: 'PATCH', path: '/api/tasks/:id', description: 'Actualizar título o estado' },
+        { method: 'DELETE', path: '/api/tasks/:id', description: 'Eliminar tarea' },
+      ],
+    });
+  }
+
   if (req.method === 'GET' && pathname === '/health') {
     return sendJson(res, 200, { status: 'ok', service: 'api-testing-demo' });
   }
-  if (req.method === 'GET' && pathname === '/api/tasks') {
+
+  if (pathname === '/api/tasks' && req.method === 'GET') {
     const completed = url.searchParams.get('completed');
-    const data = [...tasks.values()].filter((task) => completed === null || task.completed === (completed === 'true'));
+    const data = [...tasks.values()].filter((task) =>
+      completed === null ? true : task.completed === (completed === 'true'),
+    );
     return sendJson(res, 200, { data, count: data.length });
   }
-  if (req.method === 'POST' && pathname === '/api/tasks') {
+
+  if (pathname === '/api/tasks' && req.method === 'POST') {
     let body;
-    try { body = await readJson(req); } catch { return sendJson(res, 413, { error: 'El cuerpo excede 1 MB' }); }
+    try {
+      body = await readJson(req);
+    } catch {
+      return sendJson(res, 413, { error: 'El cuerpo excede 1 MB' });
+    }
     if (!body || typeof body.title !== 'string' || !body.title.trim()) {
       return sendJson(res, 400, { error: 'El campo title es obligatorio' });
     }
@@ -50,7 +81,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') return sendJson(res, 200, task);
     if (req.method === 'PATCH') {
       let body;
-      try { body = await readJson(req); } catch { return sendJson(res, 413, { error: 'El cuerpo excede 1 MB' }); }
+      try {
+        body = await readJson(req);
+      } catch {
+        return sendJson(res, 413, { error: 'El cuerpo excede 1 MB' });
+      }
       if (!body || (body.title === undefined && body.completed === undefined)) {
         return sendJson(res, 400, { error: 'Indica title o completed para actualizar' });
       }
@@ -60,10 +95,12 @@ const server = http.createServer(async (req, res) => {
       if (body.completed !== undefined && typeof body.completed !== 'boolean') {
         return sendJson(res, 400, { error: 'completed debe ser booleano' });
       }
-      const updated = { ...task };
-      if (body.title !== undefined) updated.title = body.title.trim();
-      if (body.completed !== undefined) updated.completed = body.completed;
-      updated.updatedAt = new Date().toISOString();
+      const updated = {
+        ...task,
+        ...(body.title === undefined ? {} : { title: body.title.trim() }),
+        ...(body.completed === undefined ? {} : { completed: body.completed }),
+        updatedAt: new Date().toISOString(),
+      };
       tasks.set(id, updated);
       return sendJson(res, 200, updated);
     }
@@ -73,10 +110,16 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
   }
+
   return sendJson(res, 404, { error: 'Ruta no encontrada' });
 });
 
-server.listen(port, '0.0.0.0', () => console.log('API listening on ' + port));
-function shutdown() { server.close(() => process.exit(0)); }
+server.listen(port, '0.0.0.0', () => {
+  console.log('API lista en http://0.0.0.0:' + port);
+});
+
+function shutdown() {
+  server.close(() => process.exit(0));
+}
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
