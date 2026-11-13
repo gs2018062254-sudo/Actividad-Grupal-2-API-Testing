@@ -1,0 +1,9 @@
+{
+  "name": "actividad-grupal-2-api-testing",
+  "version": "1.0.0",
+  "private": false,
+  "description": "API REST de tareas con pruebas Cypress automatizadas",
+  "scripts": {"start": "node server.js", "test:api": "cypress run --spec cypress/e2e/api.cy.js"},
+  "engines": {"node": ">=20"},
+  "devDependencies": {"cypress": "^15.7.1"}
+}
